@@ -1,0 +1,33 @@
+{
+  "name": "state-dev-krak",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "간단한 상태 관리 라이브러리",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "packageManager": "pnpm@10.12.1",
+  "engines": {
+		"node": "22.x"
+	},
+  "keywords": ["state", "javascript", "typescript", "react"],
+  "author": "junhoKims",
+  "license": "MIT",
+  "volta": {
+		"node": "22.16.0",
+		"pnpm": "10.12.1"
+	},
+	"files": ["dist", "README.md"],
+	"homepage": "https://github.com/junhoKims/state-dev-krak",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/junhoKims/state-dev-krak.git"
+	},
+	"bugs": {
+		"url": "https://github.com/junhoKims/utils-dev-krak/issues"
+	},
+	"publishConfig": {
+		"access": "public"
+	}
+}
