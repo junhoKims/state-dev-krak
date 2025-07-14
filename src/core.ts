@@ -1,4 +1,4 @@
-import type { Atom } from "./types";
+import type { Atom } from "./types.js";
 
 /**
  * Atom에서 클로저로 관리되고 있는 값을 반환하는 함수
