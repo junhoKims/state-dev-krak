@@ -45,14 +45,13 @@ export const createAtom = <T>(initialValue: T): Atom<T> => {
   let curValue = initialValue;
   let subscribers = new Set<(value: T) => void>();
 
-  /**
-   * 1. 동일한 값해도 렌더링되는데 막자
-   * 2. 배치업데이트 처리를 해주고 싶어
-   */
-
   return {
     _getValue: () => curValue,
     _setValue: (value: T) => {
+      if (Object.is(curValue, value)) {
+        return;
+      }
+
       curValue = value;
       subscribers.forEach(callback => callback(value));
     },
