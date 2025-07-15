@@ -1,24 +1,41 @@
 {
-  "name": "state-dev-krak",
-  "version": "1.0.0",
-  "type": "module",
-  "description": "간단한 상태 관리 라이브러리",
-  "main": "index.js",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
-  "packageManager": "pnpm@10.12.1",
-  "engines": {
+	"name": "state-dev-krak",
+	"version": "1.0.0",
+	"type": "module",
+	"description": "간단한 상태 관리 라이브러리",
+	"main": "index.js",
+	"scripts": {
+		"test": "vitest --run",
+		"test:coverage": "vitest --run --coverage"
+	},
+	"devDependencies": {
+		"@types/node": "^24.0.13",
+		"@vitest/coverage-v8": "^3.2.4",
+		"esbuild": "^0.25.6",
+		"happy-dom": "^18.0.1",
+		"typescript": "^5.8.3",
+		"vitest": "^3.2.4"
+	},
+	"packageManager": "pnpm@10.12.1",
+	"engines": {
 		"node": "22.x"
 	},
-  "keywords": ["state", "javascript", "typescript", "react"],
-  "author": "junhoKims",
-  "license": "MIT",
-  "volta": {
+	"keywords": [
+		"state",
+		"javascript",
+		"typescript",
+		"react"
+	],
+	"author": "junhoKims",
+	"license": "MIT",
+	"volta": {
 		"node": "22.16.0",
 		"pnpm": "10.12.1"
 	},
-	"files": ["dist", "README.md"],
+	"files": [
+		"dist",
+		"README.md"
+	],
 	"homepage": "https://github.com/junhoKims/state-dev-krak",
 	"repository": {
 		"type": "git",

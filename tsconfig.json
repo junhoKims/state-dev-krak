@@ -1,0 +1,25 @@
+{
+  "compilerOptions": {
+    /** base */
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "target": "esnext",
+    "allowJs": true,
+    "moduleDetection": "force",
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+    /** strict */
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    /** transpile typescript */
+    "module": "NodeNext",
+    "outDir": "dist",
+    /** with dom */
+    "lib": ["esnext", "dom", "dom.iterable"],
+    "types": ["node", "vitest/globals"],
+    "paths": {
+      "@/*": ["./src/*"]
+    }
+  }
+}
