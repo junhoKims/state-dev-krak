@@ -17,6 +17,7 @@
     "outDir": "dist",
     /** with dom */
     "lib": ["esnext", "dom", "dom.iterable"],
+    "jsx": "react-jsx",
     "types": ["node", "react", "react-dom", "vitest/globals"],
     "paths": {
       "@/*": ["./src/*"]

@@ -22,5 +22,3 @@ export const useAtom = <T>(atom: Atom<T>): [T, (value: T) => void] => {
   );
   return [value, setter];
 };
-
-
