@@ -1,4 +1,9 @@
-import { createAtom, get, set, subscribe } from "./core.js";
+import { Suspense, Component } from "react";
+import { act, renderHook, screen } from "@testing-library/react";
+import { useAtom } from "./react.js";
+import { createAsyncAtom, createAtom, get, set, subscribe } from "./core.js";
+import type * as React from "react";
+
 
 describe("core", () => {
   beforeEach(() => {
@@ -54,7 +59,7 @@ describe("core", () => {
   });
 
   describe("subscribe", () => {
-    it("`Atom`의 값이 바뀌면 콜백이 호출된다", async () => {
+    it("Atom의 값이 바뀌면 콜백이 호출된다", async () => {
       const baseAtom = createAtom(0);
       const callback = vi.fn();
       subscribe(baseAtom, callback);
@@ -79,7 +84,7 @@ describe("core", () => {
       });
     });
 
-    it("`Atom`의 값이 여러번 변경되도 배칭 업데이트 되어 한번만 콜백이 호출된다", async () => {
+    it("Atom의 값이 여러번 변경되도 배칭 업데이트 되어 한번만 콜백이 호출된다", async () => {
       const baseAtom = createAtom(0);
       const callback = vi.fn();
       subscribe(baseAtom, callback);
@@ -132,4 +137,91 @@ describe("core", () => {
       expect(baseAtom.hasOwnProperty("_subscribe")).toBe(true);
     });
   });
+
+  describe("createAsyncAtom", () => {
+    let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
+    const LOADING_MSG = "loading...";
+    const ERROR_MSG = "error...";
+
+    beforeEach(() => {
+      consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    });
+
+    afterEach(() => {
+      consoleErrorSpy.mockRestore();
+    });
+
+    it("promise가 pending중에는 promise를 throw하고, fulfilled 이후 결과를 반환한다", async () => {
+      const promise = new Promise((resolve) => resolve("success data"));
+      const asyncAtom = createAsyncAtom(promise);
+
+      const wrapper = createWrapper(LOADING_MSG, ERROR_MSG);
+      const { result } = renderHook(() => useAtom(asyncAtom), { wrapper });
+
+      await act(async () => {
+        expect(screen.getByText(LOADING_MSG)).toBeInTheDocument();
+        expect(result.current).toBeNull();
+      });
+
+      await act(async () => {
+        expect(result.current[0]).toBe("success data");
+      });
+    });
+
+    it("promise가 rejected 된 경우 error를 throw한다", async () => {
+      const promise = new Promise((_, reject) => reject("error"));
+      const asyncAtom = createAsyncAtom(promise);
+
+      const wrapper = createWrapper(LOADING_MSG, ERROR_MSG);
+      renderHook(() => useAtom(asyncAtom), { wrapper });
+
+      await act(async () => {
+        expect(screen.getByText(LOADING_MSG)).toBeInTheDocument();
+        expect(() => get(asyncAtom)).toThrow();
+      });
+
+      await act(async () => {
+        expect(screen.getByText(ERROR_MSG)).toBeInTheDocument();
+        expect(() => get(asyncAtom)).toThrow();
+      });
+    });
+  });
 });
+
+const createWrapper = (loadingMsg: string, errorMsg: string) => {
+  return ({ children }: { children: React.ReactNode }) => {
+    return (
+      <ErrorBoundary fallback={<div>{errorMsg}</div>}>
+        <Suspense fallback={<div>{loadingMsg}</div>}>{children}</Suspense>
+      </ErrorBoundary>
+    );
+  };
+};
+
+interface ErrorBoundaryProps {
+  children: React.ReactNode;
+  fallback: React.ReactNode;
+}
+interface ErrorBoundaryState {
+  hasError: boolean;
+}
+class ErrorBoundary extends Component<
+  ErrorBoundaryProps,
+  ErrorBoundaryState
+> {
+  constructor(props: ErrorBoundaryProps) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError(_: Error) {
+    return { hasError: true };
+  }
+
+  override render() {
+    if (this.state.hasError) {
+      return <>{this.props.fallback}</>;
+    }
+    return <>{this.props.children}</>;
+  }
+}
