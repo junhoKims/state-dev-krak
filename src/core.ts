@@ -43,7 +43,7 @@ export const subscribe = <T>(atom: Atom<T>, callback: (value: T) => void) => {
 
 export const createAtom = <T>(initialValue: T): Atom<T> => {
   let curValue = initialValue;
-  let subscribers = new Set<(value: T) => void>();
+  const subscribers = new Set<(value: T) => void>();
 
   let isBatching = false;
 
@@ -67,6 +67,76 @@ export const createAtom = <T>(initialValue: T): Atom<T> => {
 
       curValue = value;
       batchUpdate();
+    },
+    _subscribe: (callback: (value: T) => void) => {
+      subscribers.add(callback);
+
+      return () => {
+        subscribers.delete(callback);
+      };
+    },
+  };
+};
+
+/**
+ * 비동기 데이터 및 에러를 관리하는 Atom을 생성하는 함수
+ * 
+ * - promise를 throw하여 Suspense를 지원
+ * - error를 throw하여 상태의 타입 안전성 보장
+ *
+ * @example
+ * const asyncAtom = createAsyncAtom(fetch('https://api.example.com/data'));
+ *
+ * const Comp = () => {
+ *   const [data] = useAtom(asyncAtom);
+ * 
+ *   return (
+ *     <div>{data && data.name}</div>
+ *   )
+ * }
+ */
+export const createAsyncAtom = <T>(promise: Promise<T>): Atom<T> => {
+  let status: "pending" | "fulfilled" | "rejected" = "pending";
+  let result: T | undefined = undefined;
+  let error: unknown = undefined;
+
+  const subscribers = new Set<(value: T) => void>();
+  let isBatching = false;
+
+  const batchUpdate = (value: T) => {
+    if (!isBatching) {
+      isBatching = true;
+
+      queueMicrotask(() => {
+        subscribers.forEach((callback) => callback(value));
+        isBatching = false;
+      });
+    }
+  };
+
+  promise
+    .then((value) => {
+      status = "fulfilled";
+      result = value;
+      batchUpdate(value);
+    })
+    .catch((err) => {
+      error = err;
+      status = "rejected";
+    });
+
+  return {
+    _getValue: () => {
+      if (status === "rejected") {
+        throw error;
+      } else if (status === "fulfilled") {
+        return result as T;
+      } else {
+        throw promise;
+      }
+    },
+    _setValue: () => {
+      throw new Error("AsyncAtom은 값을 변경할 수 없습니다");
     },
     _subscribe: (callback: (value: T) => void) => {
       subscribers.add(callback);
