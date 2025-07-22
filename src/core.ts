@@ -47,7 +47,7 @@ export const createAtom = <T>(initialValue: T): Atom<T> => {
 
   let isBatching = false;
 
-  const batchUpdate = () => {
+  const scheduleUpdate = () => {
     if (!isBatching) {
       isBatching = true;
 
@@ -66,7 +66,7 @@ export const createAtom = <T>(initialValue: T): Atom<T> => {
       }
 
       curValue = value;
-      batchUpdate();
+      scheduleUpdate();
     },
     _subscribe: (callback: (value: T) => void) => {
       subscribers.add(callback);
@@ -103,7 +103,7 @@ export const createAsyncAtom = <T>(promise: Promise<T>): Atom<T> => {
   const subscribers = new Set<(value: T) => void>();
   let isBatching = false;
 
-  const batchUpdate = (value: T) => {
+  const scheduleUpdate = (value: T) => {
     if (!isBatching) {
       isBatching = true;
 
@@ -118,7 +118,7 @@ export const createAsyncAtom = <T>(promise: Promise<T>): Atom<T> => {
     .then((value) => {
       status = "fulfilled";
       result = value;
-      batchUpdate(value);
+      scheduleUpdate(value);
     })
     .catch((err) => {
       error = err;
@@ -151,81 +151,99 @@ export const createAsyncAtom = <T>(promise: Promise<T>): Atom<T> => {
 export const createDerivedAtom = <T>(
   callback: <U>(get: (atom: Atom<U>) => U) => T
 ): Atom<T> => {
-  let curValue: T | undefined = undefined;
-  const subscribers = new Set<(value: T) => void>();
-
-  const dependencies = new Set<Atom<unknown>>();
-  const derivedSubscribers = new Map<Atom<unknown>, () => void>();
-
+  let currentValue: T | undefined = undefined;
   let isBatching = false;
 
-  const batchUpdate = () => {
-    if (!isBatching) {
-      isBatching = true;
+  const subscribers = new Set<(value: T) => void>();
+  const dependencies = new Set<Atom<unknown>>();
+  const dependencySubscribers = new Map<Atom<unknown>, () => void>();
 
-      queueMicrotask(() => {
-        isBatching = false;
-        let newValue = calculate();
+  const scheduleUpdate = (): void => {
+    if (isBatching) return;
 
-        if (!Object.is(newValue, curValue)) {
-          subscribers.forEach((callback) => callback(curValue as T));
+    isBatching = true;
+
+    queueMicrotask(() => {
+      isBatching = false;
+      const newValue = calculateDerivedValue();
+
+      const valueHasChanged = !Object.is(newValue, currentValue);
+      if (valueHasChanged) {
+        subscribers.forEach((callback) => callback(currentValue as T));
+      }
+    });
+  };
+
+  const isDependenciesEqual = (
+    adeps: Set<Atom<unknown>>,
+    bdeps: Set<Atom<unknown>>
+  ) => {
+    const hasSameSize = adeps.size === bdeps.size;
+    const hasSameItems = Array.from(adeps).every((atom) => bdeps.has(atom));
+    return hasSameSize && hasSameItems;
+  };
+
+  const clearAllDependencies = (): void => {
+    dependencySubscribers.forEach((unsubscribe) => unsubscribe());
+    dependencySubscribers.clear();
+    dependencies.clear();
+  };
+
+  const setupDependenciesSubscribe = (newDependencies: Set<Atom<unknown>>) => {
+    newDependencies.forEach((atom) => {
+      const unsubscribe = atom._subscribe(() => {
+        const hasActiveSubscribers = subscribers.size > 0;
+        if (hasActiveSubscribers) {
+          scheduleUpdate();
         }
       });
+
+      dependencySubscribers.set(atom, unsubscribe);
+    });
+  };
+
+  const updateDependenciesIfChanged = (newDependencies: Set<Atom<unknown>>) => {
+    const dependenciesHaveChanged = !isDependenciesEqual(
+      dependencies,
+      newDependencies
+    );
+
+    if (dependenciesHaveChanged) {
+      clearAllDependencies();
+
+      newDependencies.forEach((atom) => dependencies.add(atom));
+      setupDependenciesSubscribe(newDependencies);
     }
   };
 
-  const calculate = () => {
-    const newDependencies = new Set<Atom<unknown>>();
+  const calculateDerivedValue = (): T => {
+    const trackedDependencies = new Set<Atom<unknown>>();
 
     const get = <U>(atom: Atom<U>): U => {
-      newDependencies.add(atom as Atom<unknown>);
+      trackedDependencies.add(atom as Atom<unknown>);
       return atom._getValue();
     };
 
-    const value = callback(get);
-    curValue = value;
+    const newValue = callback(get);
+    currentValue = newValue;
 
-    const dependenciesChanged = (() => {
-      const sizeDiff = dependencies.size !== newDependencies.size;
-      const itemDiff = !Array.from(dependencies).every((atom) =>
-        newDependencies.has(atom)
-      );
-      return sizeDiff || itemDiff;
-    })();
-
-    if (dependenciesChanged) {
-      clearDependencies();
-      newDependencies.forEach((atom) => dependencies.add(atom));
-
-      dependencies.forEach((atom) => {
-        const unsubscribe = atom._subscribe(() => {
-          if (subscribers.size > 0) {
-            batchUpdate();
-          }
-        });
-
-        derivedSubscribers.set(atom, unsubscribe);
-      });
-    }
-  };
-
-  const clearDependencies = () => {
-    derivedSubscribers.forEach((unsub) => unsub());
-    derivedSubscribers.clear();
-    dependencies.clear();
+    updateDependenciesIfChanged(trackedDependencies);
+    return newValue;
   };
 
   return {
     _getValue: () => {
-      calculate();
-      return curValue as T;
+      calculateDerivedValue();
+      return currentValue as T;
     },
+
     _setValue: () => {
       throw new Error("DerivedAtom은 값을 변경할 수 없습니다");
     },
+
     _subscribe: (callback: (value: T) => void) => {
       if (subscribers.size === 0) {
-        calculate();
+        calculateDerivedValue();
       }
 
       subscribers.add(callback);
@@ -234,8 +252,8 @@ export const createDerivedAtom = <T>(
         subscribers.delete(callback);
 
         if (subscribers.size === 0) {
-          clearDependencies();
-          curValue = undefined;
+          clearAllDependencies();
+          currentValue = undefined;
         }
       };
     },
