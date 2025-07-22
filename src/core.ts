@@ -147,3 +147,90 @@ export const createAsyncAtom = <T>(promise: Promise<T>): Atom<T> => {
     },
   };
 };
+
+export const createDerivedAtom = <T>(callback: <U>(get: (atom: Atom<U>) => U) => T): Atom<T> => {
+  let curValue: T | undefined = undefined;
+  const subscribers = new Set<(value: T) => void>();
+
+  const dependencies = new Set<Atom<unknown>>();
+  const derivedSubscribers = new Map<Atom<unknown>, () => void>();
+
+
+  let isBatching = false;
+
+  const batchUpdate = (value?: T) => {
+    if (!isBatching) {
+      isBatching = true;
+
+      queueMicrotask(() => {
+        isBatching = false;
+        let newValue = value ?? calc();
+
+        if (!Object.is(newValue, curValue)) {
+          subscribers.forEach((callback) => callback(curValue as T));
+        }
+      });
+    }
+  }
+
+  const calc = () => {
+    const newDependencies = new Set<Atom<unknown>>();
+
+    const get = <U>(atom: Atom<U>): U => {
+      newDependencies.add(atom as Atom<unknown>);
+      return atom._getValue();
+    };
+
+    const calcValue = callback(get);
+
+    const dependenciesChanged = (() => {
+      const sizeDiff = dependencies.size !== newDependencies.size;
+      const hasDiff = !Array.from(dependencies).every((atom) => newDependencies.has(atom));
+      return sizeDiff || hasDiff;
+    })();
+
+    if (dependenciesChanged) {
+      cleanDependencies();
+      
+      newDependencies.forEach((atom) => dependencies.add(atom));
+      setupDependencies(calcValue);
+    }
+
+    return calcValue;
+  }
+
+  const cleanDependencies = () => {
+    derivedSubscribers.forEach((unsub) => unsub());
+    derivedSubscribers.clear();
+    dependencies.clear();
+  }
+
+  const setupDependencies = (value: T) => {
+    dependencies.forEach((atom) => {
+      const unsubscribe = atom._subscribe(() => {
+        if (subscribers.size > 0) {
+          batchUpdate(value);
+        }
+      });
+      derivedSubscribers.set(atom, unsubscribe);
+      
+    })
+  }
+
+  return {
+    _getValue: () => {
+      curValue = calc();
+      return curValue as T;
+    },
+    _setValue: () => {
+      throw new Error("DerivedAtom은 값을 변경할 수 없습니다");
+    },
+    _subscribe: (callback: (value: T) => void) => {
+      subscribers.add(callback);
+
+      return () => {
+        subscribers.delete(callback);
+      };
+    },
+  };
+};
