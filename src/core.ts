@@ -80,7 +80,7 @@ export const createAtom = <T>(initialValue: T): Atom<T> => {
 
 /**
  * 비동기 데이터 및 에러를 관리하는 Atom을 생성하는 함수
- * 
+ *
  * - promise를 throw하여 Suspense를 지원
  * - error를 throw하여 상태의 타입 안전성 보장
  *
@@ -89,7 +89,7 @@ export const createAtom = <T>(initialValue: T): Atom<T> => {
  *
  * const Comp = () => {
  *   const [data] = useAtom(asyncAtom);
- * 
+ *
  *   return (
  *     <div>{data && data.name}</div>
  *   )
@@ -148,32 +148,33 @@ export const createAsyncAtom = <T>(promise: Promise<T>): Atom<T> => {
   };
 };
 
-export const createDerivedAtom = <T>(callback: <U>(get: (atom: Atom<U>) => U) => T): Atom<T> => {
+export const createDerivedAtom = <T>(
+  callback: <U>(get: (atom: Atom<U>) => U) => T
+): Atom<T> => {
   let curValue: T | undefined = undefined;
   const subscribers = new Set<(value: T) => void>();
 
   const dependencies = new Set<Atom<unknown>>();
   const derivedSubscribers = new Map<Atom<unknown>, () => void>();
 
-
   let isBatching = false;
 
-  const batchUpdate = (value?: T) => {
+  const batchUpdate = () => {
     if (!isBatching) {
       isBatching = true;
 
       queueMicrotask(() => {
         isBatching = false;
-        let newValue = value ?? calc();
+        let newValue = calculate();
 
         if (!Object.is(newValue, curValue)) {
           subscribers.forEach((callback) => callback(curValue as T));
         }
       });
     }
-  }
+  };
 
-  const calc = () => {
+  const calculate = () => {
     const newDependencies = new Set<Atom<unknown>>();
 
     const get = <U>(atom: Atom<U>): U => {
@@ -181,55 +182,61 @@ export const createDerivedAtom = <T>(callback: <U>(get: (atom: Atom<U>) => U) =>
       return atom._getValue();
     };
 
-    const calcValue = callback(get);
+    const value = callback(get);
+    curValue = value;
 
     const dependenciesChanged = (() => {
       const sizeDiff = dependencies.size !== newDependencies.size;
-      const hasDiff = !Array.from(dependencies).every((atom) => newDependencies.has(atom));
-      return sizeDiff || hasDiff;
+      const itemDiff = !Array.from(dependencies).every((atom) =>
+        newDependencies.has(atom)
+      );
+      return sizeDiff || itemDiff;
     })();
 
     if (dependenciesChanged) {
-      cleanDependencies();
-      
+      clearDependencies();
       newDependencies.forEach((atom) => dependencies.add(atom));
-      setupDependencies(calcValue);
+
+      dependencies.forEach((atom) => {
+        const unsubscribe = atom._subscribe(() => {
+          if (subscribers.size > 0) {
+            batchUpdate();
+          }
+        });
+
+        derivedSubscribers.set(atom, unsubscribe);
+      });
     }
+  };
 
-    return calcValue;
-  }
-
-  const cleanDependencies = () => {
+  const clearDependencies = () => {
     derivedSubscribers.forEach((unsub) => unsub());
     derivedSubscribers.clear();
     dependencies.clear();
-  }
-
-  const setupDependencies = (value: T) => {
-    dependencies.forEach((atom) => {
-      const unsubscribe = atom._subscribe(() => {
-        if (subscribers.size > 0) {
-          batchUpdate(value);
-        }
-      });
-      derivedSubscribers.set(atom, unsubscribe);
-      
-    })
-  }
+  };
 
   return {
     _getValue: () => {
-      curValue = calc();
+      calculate();
       return curValue as T;
     },
     _setValue: () => {
       throw new Error("DerivedAtom은 값을 변경할 수 없습니다");
     },
     _subscribe: (callback: (value: T) => void) => {
+      if (subscribers.size === 0) {
+        calculate();
+      }
+
       subscribers.add(callback);
 
       return () => {
         subscribers.delete(callback);
+
+        if (subscribers.size === 0) {
+          clearDependencies();
+          curValue = undefined;
+        }
       };
     },
   };
